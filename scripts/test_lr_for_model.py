@@ -5,12 +5,10 @@ import json
 import argparse
 import numpy
 import torch
-from detm import Corpus, train_model, load_embeddings
+from detm import Corpus, test_for_lr, load_embeddings
 import detm
 
-
 logger = logging.getLogger("train_model")
-
 
 if __name__ == "__main__":
 
@@ -91,57 +89,31 @@ if __name__ == "__main__":
     with gzip.open(args.train, "rt") as ifd:
         for i, line in enumerate(ifd):
             corpus.append(json.loads(line))
-    
     min_time = args.min_time if args.min_time else 0
     max_time = args.max_time if args.max_time else 9999
 
     subdocs, times, word_list = corpus.get_filtered_subdocs(
         content_field=args.content_field,
         time_field=args.time_field,
-        time_reg=(min_time, max_time),
+        time_reg= (min_time, max_time),
         min_word_count=args.min_word_count,
         max_word_proportion=args.max_word_proportion,
     )
     
     embeddings = load_embeddings(args.embeddings)
-    
-    model = model_class(
-        word_list=word_list,
-        num_topics=args.num_topics,
-        window_size=args.window_size,
-        min_time=min(times) if min_time == 0 else min_time,
-        max_time=max(times) if max_time == 9999 else max_time,
-        embeddings=embeddings,
-    )
-    
-    model.to(args.device)
 
-    if args.optimizer == 'adam':
-        optimizer = torch.optim.Adam(
-            model.parameters(),
-            lr=args.learning_rate,
-            weight_decay=args.wdecay
-        )
-    elif args.optimizer == 'sgd':
-        optimizer = torch.optim.SGD(
-            model.parameters(),
-            lr=args.learning_rate, 
-            weight_decay=args.wdecay)
-    else:
-        raise Exception('Unimplemented')
-
-    best_state = train_model(
-        model=model,        
-        subdocs=subdocs,
-        times=times,
-        optimizer=optimizer,
-        max_epochs=args.max_epochs,
-        batch_size=args.batch_size,
-        device=args.device,
-        detect_anomalies=False
+    lr = test_for_lr(
+        subdocs, times,
+        model_class, word_list,
+        (min(times) if min_time == 0 else min_time),
+        (max(times) if max_time == 9999 else max_time),
+        args.num_topics, args.window_size,
+        args.learning_rate, args.wdecay,
+        embeddings, device=args.device,
+        optimizer_type=args.optimizer
     )
-    
-    model.load_state_dict(best_state)
-    
-    with gzip.open(args.output, "wb") as ofd:
-        torch.save(model, ofd)
+
+    logger.info(f"final lr found: {lr}")
+
+    with open(args.output, 'w') as f:
+        f.write(f"{lr}\n")

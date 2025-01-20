@@ -4,12 +4,10 @@ import math
 import json
 import argparse
 import re
+import random
 from detm import Corpus, train_embeddings, save_embeddings
 
-
 logger = logging.getLogger("train_embeddings")
-
-
 
 if __name__ == "__main__":
 
