@@ -4,3 +4,5 @@
 .#*
 work
 custom.py
+.venv
+wandb

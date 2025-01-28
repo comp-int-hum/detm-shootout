@@ -43,7 +43,12 @@ if __name__ == "__main__":
         for i, line in enumerate(ifd):
             j = json.loads(line)
             key = j[args.split_field] if args.split_field else i
-            subdocs = split_into_subdocs(j[args.content_field], args.max_subdoc_length, args.lowercase)
+            if isinstance(j[args.content_field], str):
+                subdocs = split_into_subdocs(j[args.content_field], args.max_subdoc_length, args.lowercase)
+            elif isinstance(j[args.content_field], list):
+                subdocs = j[args.content_field]
+            else:
+                raise ValueError("content_field must be a string or a list")
             if args.down_sample > 0.0:
                 random.shuffle(subdocs)
                 subdocs = subdocs[:int((1.0 - args.down_sample) * len(subdocs))]
