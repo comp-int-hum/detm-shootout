@@ -50,5 +50,5 @@ if __name__ == "__main__":
         args.batch_size
     )
 
-    with gzip.open(args.output, "wt") as ofd:
-        ofd.write(json.dumps({"test_perplexity" : ppl}) + "\n")
+    with open(args.output, "wt") as ofd:
+        ofd.write(json.dumps({"test_perplexity" : ppl, "file_data": args.input}) + "\n")

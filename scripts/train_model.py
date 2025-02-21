@@ -66,7 +66,14 @@ if __name__ == "__main__":
     parser.add_argument('--delta', type=float, default=0.005, help='prior variance')
     parser.add_argument('--train_proportion', type=float, default=0.7, help='')
     parser.add_argument("--model_type", dest="model_type", required=True)
+    parser.add_argument("--use_wandb", dest="use_wandb", default=False, help="Whether to use wandb for logging")
+    parser.add_argument("--word_list", dest="word_list", help="Word list file", default=None)
+    parser.add_argument("--training_evaluation", dest="training_evaluation", default=False, action="store_true", help="Whether to evaluate during training")
+    parser.add_argument("--eval_every", dest="eval_every", type=int, default=5, help="Evaluate every n epochs")
     args = parser.parse_args()
+
+    if args.use_wandb:
+        import wandb
     
     logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
@@ -83,6 +90,10 @@ if __name__ == "__main__":
         logger.warning("Setting device to CPU because CUDA isn't available")
         args.device = "cpu"
 
+    if args.use_wandb:
+        wandb.init(project="detm", name=args.output)
+        wandb.config.update(args)
+
     torch.set_default_device(args.device)
     corpus = Corpus()
 
@@ -90,12 +101,21 @@ if __name__ == "__main__":
         for i, line in enumerate(ifd):
             corpus.append(json.loads(line))
 
-    subdocs, times, word_list = corpus.get_filtered_subdocs(
-        content_field=args.content_field,
-        time_field=args.time_field,
-        min_word_count=args.min_word_count,
-        max_word_proportion=args.max_word_proportion,
-    )
+
+    if args.word_list:
+        word_list = json.load(open(args.word_list, "r"))
+        class ModelTemp:
+            word_list = word_list
+        model = ModelTemp()
+        subdocs, times = corpus.filter_for_model(model, args.content_field, args.time_field)
+    else:
+        subdocs, times, word_list = corpus.get_filtered_subdocs(
+            content_field=args.content_field,
+            time_field=args.time_field,
+            min_word_count=args.min_word_count,
+            max_word_proportion=args.max_word_proportion,
+        )
+    
     
     embeddings = load_embeddings(args.embeddings)
     
@@ -124,7 +144,10 @@ if __name__ == "__main__":
         max_epochs=args.max_epochs,
         batch_size=args.batch_size,
         device=args.device,
-        detect_anomalies=False
+        detect_anomalies=False,
+        use_wandb=args.use_wandb,
+        evaluate_while_training =  args.training_evaluation,
+        evaluation_epochs =args.eval_every,
     )
     
     model.load_state_dict(best_state)

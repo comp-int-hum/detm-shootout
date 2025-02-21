@@ -51,7 +51,8 @@ if __name__ == "__main__":
                 raise ValueError("content_field must be a string or a list")
             if args.down_sample > 0.0:
                 random.shuffle(subdocs)
-                subdocs = subdocs[:int((1.0 - args.down_sample) * len(subdocs))]
+                to_keep = int((1.0 - args.down_sample) * len(subdocs))
+                subdocs = subdocs[:to_keep]
             j[args.content_field] = subdocs
             data[i] = data.get(i, [])
             data[i].append(j)
