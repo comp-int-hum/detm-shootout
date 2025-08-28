@@ -11,7 +11,7 @@ logger = logging.getLogger("split_data")
 
 
 def split_into_subdocs(text, max_subdoc_length, lowercase):
-    tokens = re.split(r"\s+", text.lower() if lowercase else text)
+    tokens = re.split(r"\s+", re.sub(r"[^\w\s]", "", text.lower() if lowercase else text))
     num_subdocs = math.ceil(len(tokens) / max_subdoc_length)
     retval = []
     for i in range(num_subdocs):
@@ -43,12 +43,7 @@ if __name__ == "__main__":
         for i, line in enumerate(ifd):
             j = json.loads(line)
             key = j[args.split_field] if args.split_field else i
-            if isinstance(j[args.content_field], str):
-                subdocs = split_into_subdocs(j[args.content_field], args.max_subdoc_length, args.lowercase)
-            elif isinstance(j[args.content_field], list):
-                subdocs = j[args.content_field]
-            else:
-                raise ValueError("content_field must be a string or a list")
+            subdocs = split_into_subdocs(j[args.content_field], args.max_subdoc_length, args.lowercase)
             if args.down_sample > 0.0:
                 random.shuffle(subdocs)
                 subdocs = subdocs[:int((1.0 - args.down_sample) * len(subdocs))]

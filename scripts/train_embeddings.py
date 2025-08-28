@@ -34,6 +34,6 @@ if __name__ == "__main__":
         for line in ifd:
             corpus.append(json.loads(line))
 
-    embs = train_embeddings(corpus, args.content_field, random_seed=args.random_seed, epochs=args.epochs)
+    embs = train_embeddings(corpus, args.content_field, random_seed=args.random_seed, epochs=args.epochs, embedding_size=args.embedding_size)
     save_embeddings(embs, args.output)
     

@@ -23,8 +23,10 @@ if __name__ == "__main__":
     #parser.add_argument("--lowercase", dest="lowercase", default=False, action="store_true", help="Whether to lower-case all text")
     parser.add_argument("--output", dest="output", help="File to save model to", required=True)
     #parser.add_argument("--max_subdoc_length", dest="max_subdoc_length", type=int, default=200, help="Documents will be split into at most this length for training (this determines what it means for words to be 'close')")
-    parser.add_argument("--window_size", dest="window_size", type=int, default=20, help="")
+    parser.add_argument("--window_size", dest="window_size", type=int, default=None, help="")
+    parser.add_argument("--window_count", dest="window_count", type=int, default=None, help="")
     parser.add_argument("--min_word_count", dest="min_word_count", type=int, default=0, help="Words occuring less than this number of times throughout the entire dataset will be ignored")
+    parser.add_argument("--max_vocabulary_size", dest="max_vocabulary_size", type=int, default=20000)
     parser.add_argument("--max_word_proportion", dest="max_word_proportion", type=float, default=1.0, help="Words occuring in more than this proportion of documents will be ignored (probably conjunctions, etc)")    
     
     parser.add_argument("--top_words", dest="top_words", type=int, default=10, help="Number of words to show for each topic in the summary file")
@@ -61,11 +63,17 @@ if __name__ == "__main__":
     parser.add_argument('--t_hidden_size', type=int, default=800, help='dimension of hidden space of q(theta)')
     parser.add_argument('--theta_act', type=str, default='relu', help='tanh, softplus, relu, rrelu, leakyrelu, elu, selu, glu)')
     parser.add_argument('--train_embeddings', default=False, action="store_true", help='whether to fix rho or train it')
+    parser.add_argument('--filter_by_wordnet', default=False, action="store_true", help='')
     parser.add_argument('--eta_nlayers', type=int, default=3, help='number of layers for eta')
     parser.add_argument('--eta_hidden_size', type=int, default=200, help='number of hidden units for rnn')
     parser.add_argument('--delta', type=float, default=0.005, help='prior variance')
     parser.add_argument('--train_proportion', type=float, default=0.7, help='')
     parser.add_argument("--model_type", dest="model_type", required=True)
+
+    parser.add_argument("--recompute_rnn_input", dest="recompute_rnn_input", default=False, action="store_true")
+    parser.add_argument("--reweight_losses", dest="reweight_losses", default=False, action="store_true")
+    parser.add_argument("--mixture_and_topic_deltas", dest="mixture_and_topic_deltas", default=(0.005, 0.005), nargs=2, type=float)
+    
     args = parser.parse_args()
     
     logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
@@ -86,34 +94,44 @@ if __name__ == "__main__":
     torch.set_default_device(args.device)
     corpus = Corpus()
 
+    logger.info("Loading documents")
     with gzip.open(args.train, "rt") as ifd:
         for i, line in enumerate(ifd):
             corpus.append(json.loads(line))
 
+    logger.info("Filtering documents")
     subdocs, times, word_list = corpus.get_filtered_subdocs(
         content_field=args.content_field,
         time_field=args.time_field,
         min_word_count=args.min_word_count,
         max_word_proportion=args.max_word_proportion,
+        max_vocabulary_size=args.max_vocabulary_size
     )
+    window_size = (max(times) - min(times)) / args.window_count if args.window_count else args.window_size
     
+    logger.info("Loading embeddings")
     embeddings = load_embeddings(args.embeddings)
-    
+
+    logger.info("Instantiating model with window size %.3f", window_size)
     model = model_class(
         word_list=word_list,
         num_topics=args.num_topics,
-        window_size=args.window_size,
+        window_size=window_size,
         min_time=min(times),
         max_time=max(times),
         embeddings=embeddings,
+        mixture_and_topic_deltas=args.mixture_and_topic_deltas,
+        recompute_rnn_input=args.recompute_rnn_input,
+        reweight_losses=args.reweight_losses,
     )
-    
+    print(model)
+
     model.to(args.device)
     
-    optimizer = torch.optim.Adam(
+    optimizer = torch.optim.RAdam(
         model.parameters(),
         lr=args.learning_rate,
-        weight_decay=args.wdecay
+        #weight_decay=args.wdecay
     )
 
     best_state = train_model(
@@ -128,6 +146,8 @@ if __name__ == "__main__":
     )
     
     model.load_state_dict(best_state)
-    
+
+    logger.info("Saving model")
     with gzip.open(args.output, "wb") as ofd:
         torch.save(model, ofd)
+    logger.info("Done")
